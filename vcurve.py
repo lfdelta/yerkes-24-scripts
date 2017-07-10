@@ -24,9 +24,12 @@ def quit(msg):
   print msg
   sys.exit()
 
+utc = time.strftime("UTC %Y-%m-%d %H:%M:%S", time.gmtime())
 parser = argparse.ArgumentParser(description="V curve")
 parser.add_argument("-p", "--plot", action="store_true",
                     help="plot the curve using matplotlib")
+parser.add_argument("-i", "--image", nargs="?", const=utc, default="",
+                    metavar="FILE", help="export the plot to a file")
 args = parser.parse_args()
 
 # establish connections to CCD (via MaximDL) and focuser
@@ -41,7 +44,7 @@ if not (focus.Connected and focus.Link): quit("Focuser failed to connect")
 if not focus.Absolute: quit("Focuser does not support absolute positioning")
 
 # take multiple exposures over the given focus range, and export data
-print time.strftime("UTC %Y-%m-%d %H:%M:%S", time.gmtime())
+print utc
 print "Focus,Mean FWHM (px),FWHM StdDev (px),Exposure (s),# Exposures"
 foci = range(focusMin, focusMax + 1, focusStep)
 fwhm = []
@@ -69,11 +72,14 @@ print "Minimum FWHM is %6.3f at a focus of %d" % (minf, foci[fwhm.index(minf)])
 sys.stdout.flush()
 
 # plot a V curve based upon the data collected
-if args.plot:
+if args.plot or args.image:
   fig, ax = plt.subplots()
   ax.set_xlabel("Focus")
   ax.set_ylabel("Mean\nFWHM", rotation=0)
   ax.errorbar(foci, fwhm, yerr=devs,
               c='g', lw=1, marker='o', mfc='lime', mec='g',
               capsize=5, ecolor='k')
-  plt.show()
+  if args.image:
+    fig.savefig(args.image)
+  if args.plot:
+    plt.show()
