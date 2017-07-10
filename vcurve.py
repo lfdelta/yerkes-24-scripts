@@ -45,6 +45,7 @@ if not focus.Absolute: quit("Focuser does not support absolute positioning")
 
 # take multiple exposures over the given focus range, and export data
 print utc
+print "%f °C" % cam.AmbientTemperature
 print "Focus,Mean FWHM (px),FWHM StdDev (px),Exposure (s),# Exposures"
 foci = range(focusMin, focusMax + 1, focusStep)
 fwhm = []
@@ -56,8 +57,9 @@ for f in foci:
   # expose photo and collect FWHM
   samples=[]
   for i in range(expCount):
-    while cam.CameraStatus == 3: continue # 3 -> "is exposing a light image"
+    while cam.CameraStatus != 2: continue # 2 -> "connected but inactive"
     cam.Expose(expTime, 1)
+    time.sleep(0.1) # this may not be sufficiently long to prevent duplicates
     samples.append(cam.FWHM)
 
   # compile and store FWHM data
