@@ -12,8 +12,7 @@ focusStep = 125
 ##  focus values to plot a V curve and find the minimum (optimum) focus.  ##
 ##      Prints CSV data to stdout and plots V curve using matplotlib.     ##
 ##                                                                        ##
-##                     Luca Frez-Albrecht, Summer 2017                    ##
-##                           Yerkes Observatory                           ##
+##                    Yerkes Observatory 24" Refractor                    ##
 ############################################################################
 
 # setup
