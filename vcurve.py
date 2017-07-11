@@ -68,7 +68,8 @@ for f in foci:
     cam.Expose(expTime, 1)
     time.sleep(0.1) # this may not be sufficiently long to prevent duplicates
     while cam.CameraStatus != 2: continue
-    samples.append(cam.FWHM)
+    samples.append(cam.FWHM if cam.FWHM > 0 else -1)
+  samples = [x for x in samples if x > 0] # don't analyze bad data
 
   # compile and store FWHM data
   mean = np.average(samples)
