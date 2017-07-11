@@ -53,11 +53,12 @@ if not focus.Absolute: quit("Focuser does not support absolute positioning")
 # take multiple exposures over the given focus range, and export data
 print utc
 print "%f %sC" % (cam.AmbientTemperature, unichr(0x00B0))
-print "Focus,Mean FWHM (px),FWHM StdDev (px),Exposure (s),# Exposures"
+print "Focus,Mean FWHM (px),FWHM StdDev (px),Exposure (s),# Exposures,# Bad Exposures"
 foci = range(focusMin, focusMax + 1, focusStep)
 fwhm = []
 devs = []
 for f in foci:
+  zeroes = 0 # number of zero-measure FWHM in this sample
   focus.Move(f)
   while focus.IsMoving: continue
 
@@ -69,14 +70,18 @@ for f in foci:
     time.sleep(0.1) # this may not be sufficiently long to prevent duplicates
     while cam.CameraStatus != 2: continue
     samples.append(cam.FWHM if cam.FWHM > 0 else -1)
-  samples = [x for x in samples if x > 0] # don't analyze bad data
+    if cam.FWHM == 0: zeroes += 1
 
   # compile and store FWHM data
-  mean = np.average(samples)
-  stdev = np.std(samples)
-  fwhm.append(mean)
-  devs.append(stdev)
-  print "%d,%.3f,%.3f,%f,%d" % (f, mean, stdev, expTime, expCount)
+  samples = [x for x in samples if x > 0] # don't analyze bad data
+  if samples == []:
+    mean = stdev = -1
+  else:
+    mean = np.average(samples)
+    stdev = np.std(samples)
+    fwhm.append(mean)
+    devs.append(stdev)
+  print "%d,%.3f,%.3f,%f,%d,%d" % (f, mean, stdev, expTime, expCount, zeroes)
 
 minf = np.min(fwhm)
 print "Minimum FWHM is %.3f at a focus of %d" % (minf, foci[fwhm.index(minf)])
