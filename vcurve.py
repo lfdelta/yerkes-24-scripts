@@ -1,4 +1,6 @@
 
+Y24 = True # set to False if script is being run on Y40
+
 expTime = 10.0
 expCount = 5
 
@@ -12,7 +14,9 @@ focusStep = 125
 ##  focus values to plot a V curve and find the minimum (optimum) focus.  ##
 ##      Prints CSV data to stdout and plots V curve using matplotlib.     ##
 ##                                                                        ##
-##                    Yerkes Observatory 24" Reflector                    ##
+##    Designed for use with Python 2.7 on the Windows operating system.   ##
+##                                                                        ##
+##                           Yerkes Observatory                           ##
 ############################################################################
 
 # setup
@@ -25,6 +29,8 @@ def quit(msg):
   sys.exit()
 
 utc = time.strftime("UTC %Y-%m-%d %H:%M:%S", time.gmtime())
+
+# parse command line arguments
 parser = argparse.ArgumentParser(description="V curve")
 parser.add_argument("-p", "--plot", action="store_true",
                     help="plot the curve using matplotlib")
@@ -37,7 +43,8 @@ cam = Dispatch("MaxIm.CCDCamera")
 cam.LinkEnabled = True
 if not cam.LinkEnabled: quit("Camera failed to connect")
 
-focus = Dispatch("ASCOM.FocusLynx.Focuser")
+focus = Dispatch("ASCOM.FocusLynx.Focuser" if Y24
+                 else "ASCOM.OptecTCF_S.Focuser")
 focus.Connected = True
 focus.Link = True
 if not (focus.Connected and focus.Link): quit("Focuser failed to connect")
@@ -45,7 +52,7 @@ if not focus.Absolute: quit("Focuser does not support absolute positioning")
 
 # take multiple exposures over the given focus range, and export data
 print utc
-print "%f °C" % cam.AmbientTemperature
+print "%f %sC" % (cam.AmbientTemperature, unichr(0x00B0))
 print "Focus,Mean FWHM (px),FWHM StdDev (px),Exposure (s),# Exposures"
 foci = range(focusMin, focusMax + 1, focusStep)
 fwhm = []
@@ -60,6 +67,7 @@ for f in foci:
     while cam.CameraStatus != 2: continue # 2 -> "connected but inactive"
     cam.Expose(expTime, 1)
     time.sleep(0.1) # this may not be sufficiently long to prevent duplicates
+    while cam.CameraStatus != 2: continue
     samples.append(cam.FWHM)
 
   # compile and store FWHM data
@@ -70,7 +78,7 @@ for f in foci:
   print "%d,%.3f,%.3f,%f,%d" % (f, mean, stdev, expTime, expCount)
 
 minf = np.min(fwhm)
-print "Minimum FWHM is %6.3f at a focus of %d" % (minf, foci[fwhm.index(minf)])
+print "Minimum FWHM is %.3f at a focus of %d" % (minf, foci[fwhm.index(minf)])
 sys.stdout.flush()
 
 # plot a V curve based upon the data collected
