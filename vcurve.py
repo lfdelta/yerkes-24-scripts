@@ -2,9 +2,9 @@
 Y24 = True # set to False if script is being run on Y40
 
 expTime = 10.0
-expCount = 5
+expCount = 4
 
-focusMin = 5000
+focusMin = 4000
 focusMax = 7000
 focusStep = 125
 
@@ -27,6 +27,34 @@ import sys, argparse, time
 def quit(msg):
   print msg
   sys.exit()
+
+def samplerange(fwhm, dev, foci, range):
+  foci.extend(range)
+  for f in range:
+    zeroes = 0 # number of zero-measure FWHM in this sample
+    focus.Move(f)
+    while focus.IsMoving: continue
+
+    # expose photo and collect FWHM
+    samples=[]
+    for i in range(expCount):
+      while cam.CameraStatus != 2: continue # 2 -> "connected but inactive"
+      cam.Expose(expTime, 1)
+      time.sleep(0.1) # this may not be sufficiently long to prevent duplicates
+      while cam.CameraStatus != 2: continue
+      samples.append(cam.FWHM if cam.FWHM > 0 else -1)
+      if cam.FWHM == 0: zeroes += 1
+
+    # compile and store FWHM data
+    samples = [x for x in samples if x > 0] # don't analyze bad data
+    if samples == []:
+      mean = stdev = -1
+    else:
+      mean = np.average(samples)
+      stdev = np.std(samples)
+      fwhm.append(mean)
+      dev.append(stdev)
+    print "%d,%.3f,%.3f,%f,%d,%d" % (f, mean, stdev, expTime, expCount, zeroes)
 
 utc = time.strftime("UTC %Y-%m-%d %H:%M:%S", time.gmtime())
 
@@ -54,37 +82,18 @@ if not focus.Absolute: quit("Focuser does not support absolute positioning")
 print utc
 print "%f %sC" % (cam.AmbientTemperature, unichr(0x00B0))
 print "Focus,Mean FWHM (px),FWHM StdDev (px),Exposure (s),# Exposures,# Bad Exposures"
-foci = range(focusMin, focusMax + 1, focusStep)
+foci = []
 fwhm = []
 devs = []
-for f in foci:
-  zeroes = 0 # number of zero-measure FWHM in this sample
-  focus.Move(f)
-  while focus.IsMoving: continue
+samplerange(fwhm, devs, foci, range(focusMin, focusMax + 1, focusStep))
+optfoc = foci[fwhm.index(np.min(fwhm))]
+samplerange(fwhm, devs, foci, range(optfoc - 500, optfoc + 501, 200))
+optfoc = foci[fwhm.index(np.min(fwhm))]
+samplerange(fwhm, devs, foci, range(optfoc - 200, optfoc + 201, 50))
 
-  # expose photo and collect FWHM
-  samples=[]
-  for i in range(expCount):
-    while cam.CameraStatus != 2: continue # 2 -> "connected but inactive"
-    cam.Expose(expTime, 1)
-    time.sleep(0.1) # this may not be sufficiently long to prevent duplicates
-    while cam.CameraStatus != 2: continue
-    samples.append(cam.FWHM if cam.FWHM > 0 else -1)
-    if cam.FWHM == 0: zeroes += 1
-
-  # compile and store FWHM data
-  samples = [x for x in samples if x > 0] # don't analyze bad data
-  if samples == []:
-    mean = stdev = -1
-  else:
-    mean = np.average(samples)
-    stdev = np.std(samples)
-    fwhm.append(mean)
-    devs.append(stdev)
-  print "%d,%.3f,%.3f,%f,%d,%d" % (f, mean, stdev, expTime, expCount, zeroes)
-
-minf = np.min(fwhm)
-print "Minimum FWHM is %.3f at a focus of %d" % (minf, foci[fwhm.index(minf)])
+minfw = np.min(fwhm)
+optfoc = foci[fwhm.index(minfw)]
+print "Minimum FWHM is %.3f at a focus of %d" % (minfw, optfoc)
 sys.stdout.flush()
 
 # plot a V curve based upon the data collected
