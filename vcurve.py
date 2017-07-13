@@ -29,7 +29,11 @@ def quit(msg):
   sys.exit()
 
 def samplerange(fwhm, dev, foci, range):
+  for f in range:
+    if f in foci: range.remove(f) # remove duplicate focuser values
+
   foci.extend(range)
+
   for f in range:
     zeroes = 0 # number of zero-measure FWHM in this sample
     focus.Move(f)
