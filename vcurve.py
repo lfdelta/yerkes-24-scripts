@@ -4,9 +4,7 @@ Y24 = True # set to False if script is being run on Y40
 expTime = 0.5
 expCount = 4
 
-focusMin = 4000
-focusMax = 7000
-focusStep = 125
+focusGuess = 6000 # tests range in [4500, 7500]
 
 ############################################################################
 ## Automatically takes a series of exposures via MaximDL and extracts the ##
@@ -32,8 +30,7 @@ def quit(msg):
 # a new list of focus values to expose at. appends new focus values, FWHM
 # means, and standard deviations to the given lists. returns void.
 def samplerange(fwhm, dev, foci, frange):
-  for f in frange:
-    if f in foci: frange.remove(f) # remove duplicate focuser values
+  frange = [f for f in frange if not f in foci] # remove duplicate focus vals
   foci.extend(frange)
 
   for f in frange:
@@ -86,20 +83,22 @@ focus.Link = True
 if not (focus.Connected and focus.Link): quit("Focuser failed to connect")
 if not focus.Absolute: quit("Focuser does not support absolute positioning")
 
-# take multiple exposures over the given focus range, and export data
+# take a series of exposures over the given focus range, and print data
 print utc
 print "%f degC" % cam.AmbientTemperature
 print "Focus,Mean FWHM (px),FWHM StdDev (px),Exposure (s),# Exposures,# Bad Exposures"
 foci = []
 fwhm = []
 devs = []
-frange = range(focusMin, focusMax + 1, 500)
+frange = range(focusGuess - 1500, focusGuess + 1501, 500)
 samplerange(fwhm, devs, foci, frange)
-optfoc = foci[fwhm.index(np.min(fwhm))]
-frange = range(optfoc - 500, optfoc + 501, 200)
+
+optfoc = foci[fwhm.index(np.min(fwhm))] # focus value of minimum FWHM
+frange = range(optfoc - 400, optfoc + 401, 200)
 samplerange(fwhm, devs, foci, frange)
+
 optfoc = foci[fwhm.index(np.min(fwhm))]
-frange = range(optfoc - 200, optfoc + 201, 50)
+frange = range(optfoc - 100, optfoc + 101, 100)
 samplerange(fwhm, devs, foci, frange)
 
 minfw = np.min(fwhm)
