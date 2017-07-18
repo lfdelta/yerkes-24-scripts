@@ -1,5 +1,6 @@
 
 Y24 = True # set to False if script is being run on Y40
+livePrint = False # print raw data as it's collected
 
 expTime = 0.5
 expCount = 4
@@ -17,7 +18,7 @@ focusGuess = 6000 # tests range in [4500, 7500]
 ##                           Yerkes Observatory                           ##
 ############################################################################
 
-# setup
+# definitions
 from win32com.client import Dispatch
 import numpy as np, matplotlib.pyplot as plt
 import sys, argparse, time
@@ -31,15 +32,16 @@ class ExposureData:
     self.focus = focusval
     self.fwhm = []
   def process(self):
-    data = [x for x in fwhm if x > 0] # don't analyze bad data
-    self.zeroes = len(fwhm) - len(data) # number of bad exposures
-    if data == []:
+    self.data = [x for x in self.fwhm if x > 0] # don't analyze bad data
+    self.zerocount = len(self.fwhm) - len(self.data) # number of bad exposures
+    if self.data == []:
       self.mean = self.stdev = -1
     else:
-      self.mean = np.mean(data)
-      self.stdev = np.std(data)
+      self.mean = np.mean(self.data)
+      self.stdev = np.std(self.data)
 
 class AutoFocuser:
+  # establish connections to CCD (via MaximDL) and focuser
   def __init__(self, focuserName, focusGuess):
     self.cam = Dispatch("MaxIm.CCDCamera")
     self.cam.linkEnabled = True
@@ -55,77 +57,71 @@ class AutoFocuser:
       quit("Focuser does not support absolute positioning")
 
     self.optimalFocus = focusGuess
-    self.rawdata = []
+    #self.rawdata = []
     self.foci = []
     self.means = []
     self.devs = []
     self.zeroes  = []
 
-  def sampleRange(self, focusRange):
-    focusRange = [f for f in focusRange if not f in self.foci]
-    self.foci.extend(focusRange)
+  # take a series of exposures over the range of focuser values in
+  # [optimal - reach, optimal + reach] with a point every 'slice' units,
+  # then store and analyze the data
+  def sampleRange(self, reach, slice):
+    self.focRange = range(self.optimalFocus - reach,
+                          self.optimalFocus + reach + 1, slice)
+    self.focRange = [f for f in self.focRange if not f in self.foci]
+    self.foci.extend(self.focRange) # append non-duplicate focus values
 
-    for f in focusRange:
+    for f in self.focRange:
       self.focuser.Move(f)
-      while self.focuser.IsMoving: continue
       tmpData = ExposureData(f)
+      if livePrint: print "\nFocus: %d" % f
+      while self.focuser.IsMoving: continue
 
       for i in range(expCount):
         while self.cam.CameraStatus != 2: continue # "connected but inactive"
         self.cam.Expose(expTime, 1)
         time.sleep(0.1) # may not be long enough to prevent duplicates
         while self.cam.CameraStatus != 2: continue
-        tmpData.fwhm.append(cam.FWHM if cam.FWHM > 0 else -1)
+        tmpData.fwhm.append(self.cam.FWHM if self.cam.FWHM else -1)
+        if livePrint: print "FWHM: %.3f" % self.cam.FWHM
 
       tmpData.process()
-      self.rawdata.append(tmpData)
+      #self.rawdata.append(tmpData)
       self.foci.append(f)
       self.means.append(tmpData.mean)
       self.devs.append(tmpData.stdev)
-      self.zeroes.append(tmpData.zeroes)
+      self.zeroes.append(tmpData.zerocount)
+      self.minfwhm = np.min(self.fwhm)
+      self.optimalFocus = self.foci[self.fwhm.index(self.minfwhm)]
 
+  # print recorded data
+  def report(self):
+    print utc
+    print "%f degC" % self.cam.AmbientTemperature
+    print ("Focus,Mean FWHM(px), FWHM StdDev (px),",
+           "Exposure (s),# Exposures,# Bad Exposures")
+    for i in range(len(self.foci)):
+      print "%d,%.3f,%.3f,%f,%d,%d" % (self.foci[i], self.means[i],
+                                       self.devs[i], expTime, expCount,
+                                       self.zeroes[i])
+    print "Minimum FWHM is %.3f at a focus of %d" % (self.minfwhm,
+                                                     self.optimalFocus)
+
+  # plot a V-curve based upon recorded data
   def drawPlot(self):
     self.fig, self.ax = plt.subplots()
     self.ax.set_xlabel("Focus")
     self.ax.set_ylabel("Mean\nFWHM", rotation=0)
-    self.ax.errorbar(foci, fwhm, yerr.devs,
+    self.ax.errorbar(self.foci, self.means, yerr=self.devs,
                      c='g', lw=1, marker='o', mfc='lime', mec='g',
                      capsize=5, ecolor='k')
 
-# takes existing lists of FWHM means, standard deviations, focuser values, and
-# a new list of focus values to expose at. appends new focus values, FWHM
-# means, and standard deviations to the given lists. returns void.
-def samplerange(fwhm, dev, foci, frange):
-  frange = [f for f in frange if not f in foci] # remove duplicate focus values
-  foci.extend(frange)
 
-  for f in frange:
-    zeroes = 0 # number of zero-measure FWHM in this sample
-    focus.Move(f)
-    while focus.IsMoving: continue
 
-    # expose photo and collect FWHM
-    samples=[]
-    for i in range(expCount):
-      while cam.CameraStatus != 2: continue # 2 -> "connected but inactive"
-      cam.Expose(expTime, 1)
-      time.sleep(0.1) # this may not be long enough to prevent duplicates
-      while cam.CameraStatus != 2: continue
-      samples.append(cam.FWHM if cam.FWHM > 0 else -1)
-      if cam.FWHM == 0: zeroes += 1
-
-    # compile and store FWHM data
-    samples = [x for x in samples if x > 0] # don't analyze bad data
-    if samples == []:
-      mean = stdev = -1
-    else:
-      mean = np.average(samples)
-      stdev = np.std(samples)
-      fwhm.append(mean)
-      dev.append(stdev)
-    print "%d,%.3f,%.3f,%f,%d,%d" % (f, mean, stdev, expTime,
-                                     expCount, zeroes)
-
+# initialize
+focName = "ASCOM.FocusLynx.Focuser" if Y24 else "ASCOM.OptecTCF_S.Focuser"
+autofoc = AutoFocuser(focName, 6000)
 utc = time.strftime("UTC %Y-%m-%d %H:%M:%S", time.gmtime())
 
 # parse command line arguments
@@ -136,51 +132,17 @@ parser.add_argument("-i", "--image", nargs="?", const=utc, default="",
                     metavar="FILE", help="export the plot to a file")
 args = parser.parse_args()
 
-# establish connections to CCD (via MaximDL) and focuser
-cam = Dispatch("MaxIm.CCDCamera")
-cam.LinkEnabled = True
-if not cam.LinkEnabled: quit("Camera failed to connect")
-cam.BinX = cam.BinY = 2
-
-focus = Dispatch("ASCOM.FocusLynx.Focuser" if Y24
-                 else "ASCOM.OptecTCF_S.Focuser")
-focus.Connected = True
-focus.Link = True
-if not (focus.Connected and focus.Link): quit("Focuser failed to connect")
-if not focus.Absolute: quit("Focuser does not support absolute positioning")
-
-# take a series of exposures over the given focus range, and print data
-print utc
-print "%f degC" % cam.AmbientTemperature
-print "Focus,Mean FWHM (px),FWHM StdDev (px),Exposure (s),# Exposures,# Bad Exposures"
-foci = []
-fwhm = []
-devs = []
-frange = range(focusGuess - 1500, focusGuess + 1501, 500)
-samplerange(fwhm, devs, foci, frange)
-
-optfoc = foci[fwhm.index(np.min(fwhm))] # focus value of minimum FWHM
-frange = range(optfoc - 400, optfoc + 401, 200)
-samplerange(fwhm, devs, foci, frange)
-
-optfoc = foci[fwhm.index(np.min(fwhm))]
-frange = range(optfoc - 100, optfoc + 101, 100)
-samplerange(fwhm, devs, foci, frange)
-
-minfw = np.min(fwhm)
-optfoc = foci[fwhm.index(minfw)]
-print "Minimum FWHM is %.3f at a focus of %d" % (minfw, optfoc)
+# take a series of exposures and print data
+autofoc.sampleRange(1500, 500)
+autofoc.sampleRange(400, 200) # equivalent to (500, 200) because of culling
+autofoc.sampleRange(100, 100) # will take between 0 and 2 exposures
+autofoc.report()
 sys.stdout.flush()
 
-# plot a V curve based upon the data collected
+# plot a V-curve, if requested
 if args.plot or args.image:
-  fig, ax = plt.subplots()
-  ax.set_xlabel("Focus")
-  ax.set_ylabel("Mean\nFWHM", rotation=0)
-  ax.errorbar(foci, fwhm, yerr=devs,
-              c='g', lw=1, marker='o', mfc='lime', mec='g',
-              capsize=5, ecolor='k')
+  autofoc.drawPlot()
   if args.image:
-    fig.savefig(args.image)
+    autofoc.fig.savefig(args.image)
   if args.plot:
-    plt.show()
+    autofoc.fig.show()
