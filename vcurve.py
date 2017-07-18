@@ -63,11 +63,11 @@ class AutoFocuser:
     self.zeroes  = []
 
   # take a series of exposures over the range of focuser values in
-  # [optimal - reach, optimal + reach] with a point every 'slice' units,
+  # [optimal - reach, optimal + reach] with a point every 'prec' units,
   # then store and analyze the data
-  def sampleRange(self, reach, slice):
+  def sampleRange(self, reach, prec):
     self.focRange = range(self.optimalFocus - reach,
-                          self.optimalFocus + reach + 1, slice)
+                          self.optimalFocus + reach + 1, prec)
     self.focRange = [f for f in self.focRange if not f in self.foci]
     self.foci.extend(self.focRange) # append non-duplicate focus values
 
@@ -144,7 +144,7 @@ args = parser.parse_args()
 # take a series of exposures and print data
 autofoc.sampleRange(1500, 500)
 autofoc.sampleRange(400, 200) # equivalent to (500, 200) because of culling
-autofoc.sampleRange(100, 100) # will take between 0 and 2 exposures
+autofoc.sampleRange(100, 100) # culled to between 0 and 2 exposures
 autofoc.report()
 sys.stdout.flush()
 
