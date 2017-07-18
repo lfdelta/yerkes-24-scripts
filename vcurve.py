@@ -26,11 +26,77 @@ def quit(msg):
   print msg
   sys.exit()
 
+class ExposureData:
+  def __init__(self, focusval):
+    self.focus = focusval
+    self.fwhm = []
+  def process(self):
+    data = [x for x in fwhm if x > 0] # don't analyze bad data
+    self.zeroes = len(fwhm) - len(data) # number of bad exposures
+    if data == []:
+      self.mean = self.stdev = -1
+    else:
+      self.mean = np.mean(data)
+      self.stdev = np.std(data)
+
+class AutoFocuser:
+  def __init__(self, focuserName, focusGuess):
+    self.cam = Dispatch("MaxIm.CCDCamera")
+    self.cam.linkEnabled = True
+    if not self.cam.LinkEnabled: quit("Camera failed to connect")
+    self.cam.BinX = self.cam.BinY = 2
+    
+    self.focuser = Dispatch(focuserName)
+    self.focuser.Connected = True
+    self.focuser.Link = True
+    if not (focuser.Connected and focuser.Link):
+      quit("Focuser failed to connect")
+    if not focuser.Absolute:
+      quit("Focuser does not support absolute positioning")
+
+    self.optimalFocus = focusGuess
+    self.rawdata = []
+    self.foci = []
+    self.means = []
+    self.devs = []
+    self.zeroes  = []
+
+  def sampleRange(self, focusRange):
+    focusRange = [f for f in focusRange if not f in self.foci]
+    self.foci.extend(focusRange)
+
+    for f in focusRange:
+      self.focuser.Move(f)
+      while self.focuser.IsMoving: continue
+      tmpData = ExposureData(f)
+
+      for i in range(expCount):
+        while self.cam.CameraStatus != 2: continue # "connected but inactive"
+        self.cam.Expose(expTime, 1)
+        time.sleep(0.1) # may not be long enough to prevent duplicates
+        while self.cam.CameraStatus != 2: continue
+        tmpData.fwhm.append(cam.FWHM if cam.FWHM > 0 else -1)
+
+      tmpData.process()
+      self.rawdata.append(tmpData)
+      self.foci.append(f)
+      self.means.append(tmpData.mean)
+      self.devs.append(tmpData.stdev)
+      self.zeroes.append(tmpData.zeroes)
+
+  def drawPlot(self):
+    self.fig, self.ax = plt.subplots()
+    self.ax.set_xlabel("Focus")
+    self.ax.set_ylabel("Mean\nFWHM", rotation=0)
+    self.ax.errorbar(foci, fwhm, yerr.devs,
+                     c='g', lw=1, marker='o', mfc='lime', mec='g',
+                     capsize=5, ecolor='k')
+
 # takes existing lists of FWHM means, standard deviations, focuser values, and
 # a new list of focus values to expose at. appends new focus values, FWHM
 # means, and standard deviations to the given lists. returns void.
 def samplerange(fwhm, dev, foci, frange):
-  frange = [f for f in frange if not f in foci] # remove duplicate focus vals
+  frange = [f for f in frange if not f in foci] # remove duplicate focus values
   foci.extend(frange)
 
   for f in frange:
