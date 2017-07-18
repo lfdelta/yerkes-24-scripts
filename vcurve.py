@@ -4,7 +4,7 @@ Y24 = True # set to False if script is being run on Y40
 expTime = 0.5
 expCount = 4
 
-focusGuess = 6000 # tests range in [4500, 7500]
+focGuess = 6000 # best guess for focuser value; tests within +/- 1500 units
 
 ############################################################################
 ## Automatically takes a series of exposures via MaximDL and extracts the ##
@@ -91,11 +91,17 @@ class AutoFocuser:
       self.means.append(tmpData.mean)
       self.devs.append(tmpData.stdev)
       self.zeroes.append(tmpData.zerocount)
-      self.minfwhm = np.min(self.fwhm)
       self.optimizeFocus
 
   def optimizeFocus(self):
-    self.optimalFocus = self.foci[self.fwhm.index(self.minfwhm)]
+    # isolate data indices which have the fewest number of bad exposures
+    for i in range(expCount):
+      candidates = [ind for ind in range(len(self.zeroes))
+                    if self.zeroes[ind] == i]
+      if candidates: break
+
+    minind = candidates[np.argmin([self.cmeans[i] for i in candidates])]
+    self.optimalFocus = self.foci[minind]
 
   # print recorded data
   def report(self):
@@ -107,8 +113,7 @@ class AutoFocuser:
       print "%d,%.3f,%.3f,%f,%d,%d" % (self.foci[i], self.means[i],
                                        self.devs[i], expTime, expCount,
                                        self.zeroes[i])
-    print "Minimum FWHM is %.3f at a focus of %d" % (self.minfwhm,
-                                                     self.optimalFocus)
+    print "Optimal focus value is %d" % self.optimalFocus
 
   # plot a V-curve based upon recorded data
   def drawPlot(self):
@@ -123,7 +128,7 @@ class AutoFocuser:
 
 # initialize
 focName = "ASCOM.FocusLynx.Focuser" if Y24 else "ASCOM.OptecTCF_S.Focuser"
-autofoc = AutoFocuser(focName, 6000)
+autofoc = AutoFocuser(focName, focGuess)
 utc = time.strftime("UTC %Y-%m-%d %H:%M:%S", time.gmtime())
 
 # parse command line arguments
