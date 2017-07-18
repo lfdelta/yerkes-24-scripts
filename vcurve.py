@@ -1,6 +1,5 @@
 
 Y24 = True # set to False if script is being run on Y40
-livePrint = False # print raw data as it's collected
 
 expTime = 0.5
 expCount = 4
@@ -75,7 +74,7 @@ class AutoFocuser:
     for f in self.focRange:
       self.focuser.Move(f)
       tmpData = ExposureData(f)
-      if livePrint: print "\nFocus: %d" % f
+      if args.raw: print "\nFocus: %d" % f
       while self.focuser.IsMoving: continue
 
       for i in range(expCount):
@@ -84,7 +83,7 @@ class AutoFocuser:
         time.sleep(0.1) # may not be long enough to prevent duplicates
         while self.cam.CameraStatus != 2: continue
         tmpData.fwhm.append(self.cam.FWHM if self.cam.FWHM else -1)
-        if livePrint: print "FWHM: %.3f" % self.cam.FWHM
+        if args.raw: print "FWHM: %.3f" % self.cam.FWHM
 
       tmpData.process()
       #self.rawdata.append(tmpData)
@@ -93,7 +92,10 @@ class AutoFocuser:
       self.devs.append(tmpData.stdev)
       self.zeroes.append(tmpData.zerocount)
       self.minfwhm = np.min(self.fwhm)
-      self.optimalFocus = self.foci[self.fwhm.index(self.minfwhm)]
+      self.optimizeFocus
+
+  def optimizeFocus(self):
+    self.optimalFocus = self.foci[self.fwhm.index(self.minfwhm)]
 
   # print recorded data
   def report(self):
@@ -126,6 +128,8 @@ utc = time.strftime("UTC %Y-%m-%d %H:%M:%S", time.gmtime())
 
 # parse command line arguments
 parser = argparse.ArgumentParser(description="V curve")
+parser.add_argument("-r", "--raw", action="store_true",
+                    help="print raw data as it is collected")
 parser.add_argument("-p", "--plot", action="store_true",
                     help="plot the curve using matplotlib")
 parser.add_argument("-i", "--image", nargs="?", const=utc, default="",
