@@ -1,7 +1,7 @@
 
 Y24 = True # set to False if script is being run on Y40
 
-expTime = 0.5
+#expTime = 0.5
 expCount = 4
 
 focGuess = 6000 # best guess for focuser value; tests within +/- 1500 units
@@ -55,12 +55,34 @@ class AutoFocuser:
     if not focuser.Absolute:
       quit("Focuser does not support absolute positioning")
 
+    self.expTime = 0.5
     self.optimalFocus = focusGuess
     #self.rawdata = []
     self.foci = []
     self.means = []
     self.devs = []
     self.zeroes  = []
+
+  def expose(self):
+    while self.cam.CameraStatus != 2: continue # 2: "connected but inactive"
+    self.cam.Expose(self.expTime, 1)
+    time.sleep(0.1) # may not be long enough to prevent duplicates
+    while self.cam.CameraStatus != 2: continue
+
+  def setupField(self):
+    self.expose()
+    self.subframe(100, 100)
+    while (self.expTime > 0.25 or self.cam.MaxPixel < 10000
+           or self.cam.MaxPixel > 20000):
+      print "%d counts at %.3fs exposure" % (self.cam.MaxPixel, self.expTime)
+      self.expTime = max(0.25, 15000.0 * self.expTime / self.cam.MaxPixel)
+      self.expose()
+
+  def subframe(self, width, height):
+    self.cam.StartX = self.cam.MaxPixelX - (width / 2)
+    self.cam.StartY = self.cam.MaxPixelY - (height / 2)
+    self.cam.NumX = width
+    self.cam.NumY = height
 
   # take a series of exposures over the range of focuser values in
   # [optimal - reach, optimal + reach] with a point every 'prec' units,
@@ -78,10 +100,7 @@ class AutoFocuser:
       while self.focuser.IsMoving: continue
 
       for i in range(expCount):
-        while self.cam.CameraStatus != 2: continue # "connected but inactive"
-        self.cam.Expose(expTime, 1)
-        time.sleep(0.1) # may not be long enough to prevent duplicates
-        while self.cam.CameraStatus != 2: continue
+        self.expose()
         tmpData.fwhm.append(self.cam.FWHM if self.cam.FWHM else -1)
         if args.raw: print "FWHM: %.3f" % self.cam.FWHM
 
@@ -111,9 +130,10 @@ class AutoFocuser:
            "Exposure (s),# Exposures,# Bad Exposures")
     for i in range(len(self.foci)):
       print "%d,%.3f,%.3f,%f,%d,%d" % (self.foci[i], self.means[i],
-                                       self.devs[i], expTime, expCount,
-                                       self.zeroes[i])
+                                       self.devs[i], self.expTime,
+                                       expCount, self.zeroes[i])
     print "Optimal focus value is %d" % self.optimalFocus
+    sys.stdout.flush()
 
   # plot a V-curve based upon recorded data
   def drawPlot(self):
@@ -142,11 +162,11 @@ parser.add_argument("-i", "--image", nargs="?", const=utc, default="",
 args = parser.parse_args()
 
 # take a series of exposures and print data
+autofoc.setupField()
 autofoc.sampleRange(1500, 500)
-autofoc.sampleRange(400, 200) # equivalent to (500, 200) because of culling
+autofoc.sampleRange(300, 200) # equivalent to (500, 200) because of culling
 autofoc.sampleRange(100, 100) # culled to between 0 and 2 exposures
 autofoc.report()
-sys.stdout.flush()
 
 # plot a V-curve, if requested
 if args.plot or args.image:
