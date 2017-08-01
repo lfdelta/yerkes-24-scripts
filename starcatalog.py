@@ -16,6 +16,13 @@ class Coordinate:
   def __repr__(self):
     return "{%f, %f}" % (self.RA, self.Dec)
 
+# calculates the local sidereal time, in hours
+def getLST(lon):
+  now = aptime.Time.now()
+  lst = now.sidereal_time('apparent', apu.quantity.Quantity(value = lon,
+                                                            unit = apu.degree))
+  return lst.value
+
 # convert altitude and azimuth coordinates to right ascension and declination,
 # given the latitude and longitude (all inputs and outputs in units of degrees)
 # methodology extracted from the follow site:
@@ -26,13 +33,6 @@ def AAtoRD(alt, az, lat = OBS_LAT, lon = OBS_LON):
   dec = np.arcsin(np.sin(alt)*np.sin(lat) + np.cos(alt)*np.cos(az)*np.cos(lat))
   ra = lst - np.rad2deg(np.arcsin(-np.cos(alt)*np.sin(az)/np.cos(dec)))
   return Coordinate(ra, np.rad2deg(dec))
-
-# calculates the local sidereal time, in hours
-def getLST(lon):
-  now = aptime.Time.now()
-  lst = now.sidereal_time('apparent', apu.quantity.Quantity(value = lon,
-                                                            unit = apu.degree))
-  return lst.value
 
 # star catalog in the form of a hash table; 0.5-degree buckets by declination
 # specifically tailored to the UCAC3 catalog used at Yerkes Observatory
@@ -104,8 +104,18 @@ class Catalog:
 
 starRef = Catalog(CATALOG)
 starRef.checkHash()
-print starRef.findNearestStar(Coordinate(250, 3))
 
 # for quick interpreter testing
 def near(ra, dec):
   print starRef.findNearestStar(Coordinate(ra, dec))
+
+# write a script to:
+# import the catalog, as here
+# create a skygrid in alt/az coordinates
+# connect to the telescope, camera, and focuser
+# iterate through the grid in spiral or zig-zag (argument to choose which)
+#   find the nearest star for a given alt/az coordinate
+#   slew to that star
+#   execute the vcurve script
+#   export (alt, az, optimal focuser value) and maybe (temp)
+#     alternatively, figure out how to store it and report all at once
