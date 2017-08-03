@@ -4,6 +4,7 @@ CATALOG = "UCAC3.txt" # filename for catalog of RA and dec for mag 5-8 stars
 OBS_LAT = 42.5704 # north latitude in degrees
 OBS_LON = -88.5563 # east latitude in degrees
 
+SCOPE_NAME = ""
 FOC_NAME = "ASCOM.FocusLynx.Focuser"
 FOC_GUESS = 6000 # best guess for focuser value
 EXP_COUNT = 4 # number of exposures per focuser value to average over
@@ -23,7 +24,7 @@ parser.add_argument("-i", "--image", action="store_true",
 args = parser.parse_args()
 
 # initialize
-autofoc = afoc.AutoFocuser(FOC_NAME, FOC_GUESS, EXP_COUNT,
+autofoc = afoc.AutoFocuser(SCOPE_NAME, FOC_NAME, FOC_GUESS, EXP_COUNT,
                            args.raw, args.image)
 starlist = afoc.Catalog(CATALOG)
 if starlist.checkHash():
