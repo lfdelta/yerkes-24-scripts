@@ -2,7 +2,7 @@
 #Y24 = True # set to False if script is being run on Y40
 
 #expTime = 0.5
-expCount = 4
+#expCount = 4
 
 #focGuess = 6000 # best guess for focuser value; tests within +/- 1500 steps
 
@@ -19,7 +19,10 @@ expCount = 4
 
 # definitions
 from win32com.client import Dispatch
-import numpy as np, matplotlib.pyplot as plt
+import numpy as np
+import matplotlib.pyplot as plt
+import astropy.time as aptime
+import astropy.units as apu
 import sys, argparse, time
 
 def quit(msg):
@@ -28,6 +31,13 @@ def quit(msg):
 
 def getUTC():
   return time.strftime("UTC %Y-%m-%d %H:%M:%S", time.gmtime())
+
+class Coordinate:
+  def __init__(self, ra, dec):
+    self.RA = ra
+    self.Dec = dec
+  def __repr__(self):
+    return "{%f, %f}" % (self.RA, self.Dec)
 
 class ExposureData:
   def __init__(self, focusval):
@@ -44,9 +54,9 @@ class ExposureData:
 
 class AutoFocuser:
   # establish connections to CCD (via MaximDL) and focuser
-  # parameters: ASCOM string for focuser identification, best guess for
-  # optimal focuser value, booleans to print raw data and store v-curve images
-  def __init__(self, scopeName, focuserName, focusGuess, raw, img):
+  # parameters: ASCOM string for focuser identification, best guess for optimal
+  # focuser value, and booleans to print raw data and store v-curve images
+  def __init__(self, scopeName, focuserName, focusGuess, expCount, raw, img):
     self.scope = Dispatch(scopeName)
     self.scope.Connected = True
     if not self.scope.Connected: quit("Telescope failed to connect")
@@ -67,6 +77,7 @@ class AutoFocuser:
       quit("Focuser does not support absolute positioning")
 
     self.expTime = 0.5
+    self.expCount = expCount
     self.optimalFocus = focusGuess
     #self.rawdata = []
     self.foci = []
@@ -75,8 +86,8 @@ class AutoFocuser:
     self.zeroes  = []
     self.imgOut = img
 
-  def slewTo(self, ra, dec):
-    self.scope.SlewToCoordinates(ra, dec)
+  def slewTo(self, coord):
+    self.scope.SlewToCoordinates(coord.RA, coord.Dec)
 
   def expose(self, t = self.expTime):
     while self.cam.CameraStatus != 2: continue # 2: "connected but inactive"
@@ -125,7 +136,7 @@ class AutoFocuser:
       if self.raw: print "\nFocus: %d" % f
       while self.focuser.IsMoving: continue
 
-      for i in range(expCount):
+      for i in range(self.expCount):
         self.expose()
         tmpData.fwhm.append(self.cam.FWHM if self.cam.FWHM else -1)
         if self.raw: print "FWHM: %.3f" % self.cam.FWHM
@@ -141,7 +152,7 @@ class AutoFocuser:
   # update the object's optimalFocus value based upon its current data
   def optimizeFocus(self):
     # isolate data indices which have the fewest number of bad exposures
-    for i in range(expCount):
+    for i in range(self.expCount):
       candidates = [ind for ind in range(len(self.zeroes))
                     if self.zeroes[ind] == i]
       if candidates: break
@@ -150,7 +161,8 @@ class AutoFocuser:
     self.optimalFocus = self.foci[minind]
 
   # take 11-13 exposures, narrowing to within 100 steps of optimal focus
-  def focusAtPoint(self):
+  def focusAtPoint(self, goto = None):
+    if (goto): self.slewTo(goto)
     self.setupField()
     self.sampleRange(1500, 500)
     self.sampleRange(300, 200) # equivalent to (500, 200) because of culling
@@ -167,7 +179,7 @@ class AutoFocuser:
     for i in range(len(self.foci)):
       print "%d,%.3f,%.3f,%f,%d,%d" % (self.foci[i], self.means[i],
                                        self.devs[i], self.expTime,
-                                       expCount, self.zeroes[i])
+                                       self.expCount, self.zeroes[i])
     print "Optimal focus value is %d" % self.optimalFocus
     sys.stdout.flush()
 
@@ -185,6 +197,89 @@ class AutoFocuser:
                      c='g', lw=1, marker='o', mfc='lime', mec='g',
                      capsize=5, ecolor='k')
 
+# star catalog in the form of a hash table; 0.5-degree buckets by declination
+# specifically tailored to the UCAC3 catalog used at Yerkes Observatory
+# sections most likely to need adjustment are commented with a "###"
+class Catalog:
+  # an array with 219 "buckets", each of which is a linked list
+  # (ls is initially non-empty to trick numpy into not creating a 2D array)
+  def __init__(self, data=None):
+    ls = [ [1] ]
+    for i in range(219 - 1): ### nbuckets
+      ls.append([])
+    self.htbl = np.array(ls)
+    self.htbl[0] = []
+    if data: self.fill(data)
+
+  # fills the catalog with {RA, Dec} coordinate objects from a text file
+  def fill(self, filename):
+    with open(filename) as f:
+      bucket = 0
+      nextdec = -19.5 ### declination upper bound for first bucket
+      for line in f:
+        ### "[%f, %f, %f, %f]" -> ["%f", "%f", "%f", "%f"] -> {%f, %f}
+        tmp = line.strip("[]\n").split(", ")
+        dec = float(tmp[1])
+        coord = Coordinate(float(tmp[0]), dec)
+        if dec > nextdec:
+          nextdec += 0.5
+          bucket += 1
+        self.htbl[bucket].append(coord)
+
+  # hash function: declination [-20, 89.5) -> bucket index [0, 218]
+  def hashDec(self, dec):
+    return int((dec - (dec % 0.5) + 0.5)*2 + 39) ###
+
+  # returns True if the hash table and hash function are mismatched
+  def checkHash(self):
+    for i in range(self.htbl.size):
+      for star in self.htbl[i]:
+        if self.hashDec(star.Dec) != i:
+          print "Hash table was formed incorrectly!"
+          return True
+
+  # takes a star catalog hash table and a target coordinate, and returns
+  # the star Coordinate in the catalog which is nearest to the target
+  def findNearestStar(self, coord):
+    # isolate relevant bucket(s) in hash table
+    bucket = self.hashDec(coord.Dec)
+    if bucket < 0 or bucket > 218: ### max index ("know your data!")
+      print "Bad coordinate %s passed to findNearestStar" % coord; return
+    candidates = [x for x in self.htbl[bucket]]
+    if coord.Dec % 0.5 < 0.1 and bucket != 0:
+      candidates.extend([x for x in self.htbl[bucket - 1]])
+    elif coord.Dec % 0.5 > 0.4 and bucket != 218: ### max index
+      candidates.extend([x for x in self.htbl[bucket + 1]])
+
+    # iterate through candidates with an accumulator
+    nearestSqdist = np.inf
+    nearestStar = None
+    for star in candidates:
+      rdist = star.RA - coord.RA
+      ddist = star.Dec - coord.Dec
+      sqdist = rdist*rdist + ddist*ddist
+      if sqdist < nearestSqdist:
+        nearestSqdist = sqdist
+        nearestStar = star
+    return nearestStar
+
+# calculate the local sidereal time, in hours
+def getLST(lon):
+  now = aptime.Time.now()
+  lst = now.sidereal_time('apparent', apu.quantity.Quantity(value = lon,
+                                                            unit = apu.degree))
+  return lst.value
+
+# convert altitude and azimuth coordinates to right ascension and declination,
+# given the latitude and longitude (all inputs and outputs in units of degrees)
+# methodology extracted from the follow site:
+# http://star-www.st-and.ac.uk/~fv/webnotes/chapter7.htm
+def AAtoRD(alt, az, lat = OBS_LAT, lon = OBS_LON):
+  alt = np.deg2rad(alt); az = np.deg2rad(az); lat = np.deg2rad(lat)
+  lst = getLST(lon) * 15
+  dec = np.arcsin(np.sin(alt)*np.sin(lat) + np.cos(alt)*np.cos(az)*np.cos(lat))
+  ra = lst - np.rad2deg(np.arcsin(-np.cos(alt)*np.sin(az)/np.cos(dec)))
+  return Coordinate(ra, np.rad2deg(dec))
 
 
 # parse command line arguments
