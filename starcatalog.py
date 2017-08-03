@@ -1,7 +1,7 @@
 
-CATALOG = 'UCAC3.txt'
-OBS_LAT = 42.5704 # north latitude in degrees
-OBS_LON = -88.5563 # east longitude in degrees
+#CATALOG = 'UCAC3.txt'
+#OBS_LAT = 42.5704 # north latitude in degrees
+#OBS_LON = -88.5563 # east longitude in degrees
 
 # definitions
 import numpy as np
@@ -67,7 +67,7 @@ class Catalog:
   def hashDec(self, dec):
     return int((dec - (dec % 0.5) + 0.5)*2 + 39) ###
 
-  # returns False if the hash table appears well-formed; True otherwise
+  # returns True if the hash table and hash function are mismatched
   def checkHash(self):
     for i in range(self.htbl.size):
       for star in self.htbl[i]:
@@ -76,7 +76,7 @@ class Catalog:
           return True
 
   # takes a star catalog hash table and a target coordinate, and returns
-  # the star in the catalog which is nearest to the target
+  # the star Coordinate in the catalog which is nearest to the target
   def findNearestStar(self, coord):
     # isolate relevant bucket(s) in hash table
     bucket = self.hashDec(coord.Dec)
@@ -102,12 +102,12 @@ class Catalog:
 
 
 
-starRef = Catalog(CATALOG)
-starRef.checkHash()
+#starRef = Catalog(CATALOG)
+#starRef.checkHash()
 
 # for quick interpreter testing
-def near(ra, dec):
-  print starRef.findNearestStar(Coordinate(ra, dec))
+#def near(ra, dec):
+#  print starRef.findNearestStar(Coordinate(ra, dec))
 
 # write a script to:
 # import the catalog, as here
