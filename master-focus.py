@@ -11,24 +11,23 @@ EXP_COUNT = 4 # number of exposures per focuser value to average over
 
 
 
-import autofocuser as afoc
+import autofocuser as af
+import argparse
 
 # parse command line arguments
 parser = argparse.ArgumentParser(description="V curve")
 parser.add_argument("-r", "--raw", action="store_true",
                     help="print raw data as it is collected")
-parser.add_argument("-p", "--plot", action="store_true",
-                    help="plot the curve using matplotlib")
 parser.add_argument("-i", "--image", action="store_true",
                     help="export v-curves to disk")
 args = parser.parse_args()
 
 # initialize
-autofoc = afoc.AutoFocuser(SCOPE_NAME, FOC_NAME, FOC_GUESS, EXP_COUNT,
-                           args.raw, args.image)
-starlist = afoc.Catalog(CATALOG)
+autofoc = af.AutoFocuser(SCOPE_NAME, FOC_NAME, FOC_GUESS, EXP_COUNT,
+                         args.raw, args.image)
+starlist = af.Catalog(CATALOG)
 if starlist.checkHash():
-  quit("Catalog hash table was poorly constructed")
+  af.quit("Catalog hash table was poorly constructed")
 
 # construct a grid of points in the sky to iterate through
 skyGrid = []
@@ -38,7 +37,7 @@ for az in range(0, 360, 60):
 
 print "Altitude (deg),Azimuth (deg),Optimal Focuser Step"
 for altAz in skyGrid:
-  goto = afoc.AAtoRD(altAz[0], altAz[1], OBS_LAT, OBS_LON)
+  goto = af.AAtoRD(altAz[0], altAz[1], OBS_LAT, OBS_LON)
   autofoc.focusAtPoint(starlist.findNearestStar(goto))
-  print "%d,%d,%d" % (autofoc.scope.Altitude, autofoc.scope.Azimuth,
+  print "%f,%f,%d" % (autofoc.scope.Altitude, autofoc.scope.Azimuth,
                       autofoc.optimalFocus)

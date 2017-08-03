@@ -23,7 +23,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import astropy.time as aptime
 import astropy.units as apu
-import sys, argparse, time
+import sys, '''argparse,''' time
 
 def quit(msg):
   print msg
