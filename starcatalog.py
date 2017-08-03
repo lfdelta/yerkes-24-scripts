@@ -52,7 +52,7 @@ class Catalog:
   def fill(self, filename):
     with open(filename) as f:
       bucket = 0
-      nextdec = -19.5 ### initial upper bound for bucket
+      nextdec = -19.5 ### declination upper bound for first bucket
       for line in f:
         ### "[%f, %f, %f, %f]" -> ["%f", "%f", "%f", "%f"] -> {%f, %f}
         tmp = line.strip("[]\n").split(", ")

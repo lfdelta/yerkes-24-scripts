@@ -78,13 +78,16 @@ class AutoFocuser:
 
     self.expTime = 0.5
     self.expCount = expCount
+    self.imgOut = img
+    self.clearData()
+
+  def clearData(self):
     self.optimalFocus = focusGuess
     #self.rawdata = []
     self.foci = []
     self.means = []
     self.devs = []
     self.zeroes  = []
-    self.imgOut = img
 
   def slewTo(self, coord):
     self.scope.SlewToCoordinates(coord.RA, coord.Dec)
@@ -162,12 +165,13 @@ class AutoFocuser:
 
   # take 11-13 exposures, narrowing to within 100 steps of optimal focus
   def focusAtPoint(self, goto = None):
+    self.clearData()
     if (goto): self.slewTo(goto)
     self.setupField()
     self.sampleRange(1500, 500)
     self.sampleRange(300, 200) # equivalent to (500, 200) because of culling
     self.sampleRange(100, 100) # culled to between 0 and 2 exposures
-    self.report()
+    #self.report()
 
   # print recorded data
   def report(self):
@@ -235,8 +239,8 @@ class Catalog:
     for i in range(self.htbl.size):
       for star in self.htbl[i]:
         if self.hashDec(star.Dec) != i:
-          print "Hash table was formed incorrectly!"
           return True
+    return False
 
   # takes a star catalog hash table and a target coordinate, and returns
   # the star Coordinate in the catalog which is nearest to the target
