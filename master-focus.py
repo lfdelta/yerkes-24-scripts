@@ -4,7 +4,7 @@ CATALOG = "UCAC3.txt" # filename for catalog of RA and dec for mag 5-8 stars
 OBS_LAT = 42.5704 # north latitude in degrees
 OBS_LON = -88.5563 # east latitude in degrees
 
-SCOPE_NAME = ""
+SCOPE_NAME = "ASCOM.SiTechDll.Telescope"
 FOC_NAME = "ASCOM.FocusLynx.Focuser"
 FOC_GUESS = 6000 # best guess for focuser value
 EXP_COUNT = 4 # number of exposures per focuser value to average over

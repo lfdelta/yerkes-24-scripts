@@ -114,6 +114,8 @@ class AutoFocuser:
     self.cam.NumX = width
     self.cam.NumY = height
 
+  # subframe to star, then optimize exposure time (minimum 0.25s) to get
+  # photon counts in the range of [10 000, 20 000]
   def setupField(self):
     self.cam.SetFullFrame()
     self.expose()
