@@ -94,6 +94,7 @@ class AutoFocuser:
 
   def getUTC(self):
     return time.strftime("UTC %Y-%m-%d %H:%M:%S", self.scope.UTCDate)
+    #return time.strftime("UTC %Y-%m-%d %H:%M:%S", time.gmtime())
 
   def slewTo(self, coord):
     self.scope.SlewToCoordinates(coord.RA, coord.Dec)
@@ -127,12 +128,15 @@ class AutoFocuser:
   def setupField(self):
     self.cam.SetFullFrame()
     self.expose()
+    if self.raw:
+        print "%d counts at %.3fs exposure" % (self.cam.MaxPixel, self.expTime)
     self.subframe(50)
-    while (self.expTime > 0.251 and (self.cam.MaxPixel < 10000
-           or self.cam.MaxPixel > 30000)):
-      print "%d counts at %.3fs exposure" % (self.cam.MaxPixel, self.expTime)
+    while (self.expTime > 0.25 and (self.cam.MaxPixel < 10000
+                                    or self.cam.MaxPixel > 30000)):
       self.expTime = max(0.25, 20000.0 * self.expTime / self.cam.MaxPixel)
       self.expose()
+      if self.raw:
+        print "%d counts at %.3fs exposure" % (self.cam.MaxPixel, self.expTime)
 
   # take a series of exposures over the range of focuser values in
   # [optimal - reach, optimal + reach] with a point every 'prec' steps,
@@ -141,8 +145,8 @@ class AutoFocuser:
     lowerbound = max(0, self.focuser.MaxStep - reach) # enforce hardware limits
     upperbound = min(self.optimalFocus + reach, self.focuser.MaxStep)
     focRange = range(lowerbound, upperbound + 1, prec)
-    focRange = [f for f in focRange if not f in self.foci]
-    self.foci.extend(focRange) # append non-duplicate focus values
+    focRange = [f for f in focRange if not f in self.foci] # remove duplicates
+    self.foci.extend(focRange)
 
     for f in focRange:
       self.focuser.Move(f)
@@ -156,7 +160,7 @@ class AutoFocuser:
         if self.raw: print "FWHM: %.3f" % self.cam.FWHM
 
       tmpData.process()
-      self.foci.append(f)
+      # already appended foci in batch
       self.means.append(tmpData.mean)
       self.devs.append(tmpData.stdev)
       self.zeroes.append(tmpData.zerocount)
