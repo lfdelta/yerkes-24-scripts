@@ -102,12 +102,13 @@ class AutoFocuser:
     if not t: t = self.expTime
     while self.cam.CameraStatus != 2: continue # 2: "connected but inactive"
     self.cam.Expose(t, 1)
-    time.sleep(0.1) # may not be long enough to prevent duplicates
+    time.sleep(0.01) # may not be long enough to prevent duplicates
     while self.cam.CameraStatus != 2: continue
 
   # establish a subframe of given dimensions (in pixels), centered at the
-  # brightest pixel in the field
-  def subframe(self, width, height):
+  # brightest pixel in the field (square subframe if only one dimension is given)
+  def subframe(self, width, height=None):
+    height = height if height else width # square if no height is given
     width = min(width, self.cam.CameraXSize) # don't subframe larger than full
     height = min(height, self.cam.CameraYSize)
     naiveX = self.cam.MaxPixelX - (width/2) # upper-left corner of subframe
@@ -126,7 +127,7 @@ class AutoFocuser:
   def setupField(self):
     self.cam.SetFullFrame()
     self.expose()
-    self.subframe(100, 100)
+    self.subframe(50)
     while (self.expTime > 0.251 and (self.cam.MaxPixel < 10000
            or self.cam.MaxPixel > 30000)):
       print "%d counts at %.3fs exposure" % (self.cam.MaxPixel, self.expTime)
