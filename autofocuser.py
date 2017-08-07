@@ -1,11 +1,4 @@
 
-#Y24 = True # set to False if script is being run on Y40
-
-#expTime = 0.5
-#expCount = 4
-
-#focGuess = 6000 # best guess for focuser value; tests within +/- 1500 steps
-
 ############################################################################
 ## Automatically takes a series of exposures via MaximDL and extracts the ##
 ##  full width at half maximum. Exposures are recorded over a series of   ##
@@ -23,7 +16,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import astropy.time as aptime
 import astropy.units as apu
-import sys, '''argparse,''' time
+import sys, time
 
 def quit(msg):
   print msg
@@ -78,12 +71,13 @@ class AutoFocuser:
 
     self.expTime = 0.5
     self.expCount = expCount
+    self.raw = raw
     self.imgOut = img
+    self.focusGuess = focusGuess
     self.clearData()
 
   def clearData(self):
-    self.optimalFocus = focusGuess
-    #self.rawdata = []
+    self.optimalFocus = self.focusGuess
     self.foci = []
     self.means = []
     self.devs = []
@@ -92,7 +86,8 @@ class AutoFocuser:
   def slewTo(self, coord):
     self.scope.SlewToCoordinates(coord.RA, coord.Dec)
 
-  def expose(self, t = self.expTime):
+  def expose(self, t = None):
+    if not t: t = self.expTime
     while self.cam.CameraStatus != 2: continue # 2: "connected but inactive"
     self.cam.Expose(t, 1)
     time.sleep(0.1) # may not be long enough to prevent duplicates
@@ -115,15 +110,15 @@ class AutoFocuser:
     self.cam.NumY = height
 
   # subframe to star, then optimize exposure time (minimum 0.25s) to get
-  # photon counts in the range of [10 000, 20 000]
+  # photon counts in the range of [10 000, 30 000]
   def setupField(self):
     self.cam.SetFullFrame()
     self.expose()
     self.subframe(100, 100)
-    while (self.expTime > 0.25 or self.cam.MaxPixel < 10000
-           or self.cam.MaxPixel > 20000):
+    while (self.expTime > 0.251 and (self.cam.MaxPixel < 10000
+           or self.cam.MaxPixel > 30000)):
       print "%d counts at %.3fs exposure" % (self.cam.MaxPixel, self.expTime)
-      self.expTime = max(0.25, 15000.0 * self.expTime / self.cam.MaxPixel)
+      self.expTime = max(0.25, 20000.0 * self.expTime / self.cam.MaxPixel)
       self.expose()
 
   # take a series of exposures over the range of focuser values in
@@ -132,7 +127,7 @@ class AutoFocuser:
   def sampleRange(self, reach, prec):
     focRange = range(self.optimalFocus - reach,
                           self.optimalFocus + reach + 1, prec)
-    focRange = [f for f in self.focRange if not f in self.foci]
+    focRange = [f for f in focRange if not f in self.foci]
     self.foci.extend(focRange) # append non-duplicate focus values
 
     for f in focRange:
@@ -147,7 +142,6 @@ class AutoFocuser:
         if self.raw: print "FWHM: %.3f" % self.cam.FWHM
 
       tmpData.process()
-      #self.rawdata.append(tmpData)
       self.foci.append(f)
       self.means.append(tmpData.mean)
       self.devs.append(tmpData.stdev)
@@ -162,7 +156,7 @@ class AutoFocuser:
                     if self.zeroes[ind] == i]
       if candidates: break
 
-    minind = candidates[np.argmin([self.cmeans[i] for i in candidates])]
+    minind = candidates[np.argmin([self.means[i] for i in candidates])]
     self.optimalFocus = self.foci[minind]
 
   # take 11-13 exposures, narrowing to within 100 steps of optimal focus
@@ -173,7 +167,6 @@ class AutoFocuser:
     self.sampleRange(1500, 500)
     self.sampleRange(300, 200) # equivalent to (500, 200) because of culling
     self.sampleRange(100, 100) # culled to between 0 and 2 exposures
-    #self.report()
 
   # print recorded data
   def report(self):
@@ -280,24 +273,9 @@ def getLST(lon):
 # given the latitude and longitude (all inputs and outputs in units of degrees)
 # methodology extracted from the follow site:
 # http://star-www.st-and.ac.uk/~fv/webnotes/chapter7.htm
-def AAtoRD(alt, az, lat = OBS_LAT, lon = OBS_LON):
+def AAtoRD(alt, az, lat, lon):
   alt = np.deg2rad(alt); az = np.deg2rad(az); lat = np.deg2rad(lat)
   lst = getLST(lon) * 15
   dec = np.arcsin(np.sin(alt)*np.sin(lat) + np.cos(alt)*np.cos(az)*np.cos(lat))
   ra = lst - np.rad2deg(np.arcsin(-np.cos(alt)*np.sin(az)/np.cos(dec)))
   return Coordinate(ra, np.rad2deg(dec))
-
-
-# parse command line arguments
-#parser = argparse.ArgumentParser(description="V curve")
-#parser.add_argument("-r", "--raw", action="store_true",
-#                    help="print raw data as it is collected")
-#parser.add_argument("-p", "--plot", action="store_true",
-#                    help="plot the curve using matplotlib")
-#parser.add_argument("-i", "--image", action="store_true",
-#                    help="export v-curves to disk")
-#args = parser.parse_args()
-
-# setup
-#focName = "ASCOM.FocusLynx.Focuser" if Y24 else "ASCOM.OptecTCF_S.Focuser"
-#autofoc = AutoFocuser(focName, focGuess, args.raw, args.image)
