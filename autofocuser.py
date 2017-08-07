@@ -82,7 +82,7 @@ class AutoFocuser:
 
   # convert altitude and azimuth coordinates to right ascension and declination,
   # given the latitude and longitude (all inputs and outputs in units of degrees)
-  # methodology extracted from the follow site:
+  # methodology extracted from the following site:
   # http://star-www.st-and.ac.uk/~fv/webnotes/chapter7.htm
   def AAtoRD(self, alt, az):
     alt = np.deg2rad(alt); az = np.deg2rad(az)
@@ -112,11 +112,11 @@ class AutoFocuser:
     height = height if height else width # square if no height is given
     width = min(width, self.cam.CameraXSize) # don't subframe larger than full
     height = min(height, self.cam.CameraYSize)
-    naiveX = self.cam.MaxPixelX - (width/2) # upper-left corner of subframe
+    naiveX = self.cam.MaxPixelX - (width/2) # X,Y: upper-left corner of subframe
     naiveY = self.cam.MaxPixelY - (height/2)
-    lbX = max(0, naiveX) # set lower bound = 0
+    lbX = max(0, naiveX) # set lower and upper bounds
     lbY = max(0, naiveY)
-    ubX = min(lbX, self.cam.CameraXSize - width) # set upper bound
+    ubX = min(lbX, self.cam.CameraXSize - width)
     ubY = min(lbY, self.cam.CameraYSize - height)
     self.cam.StartX = ubX
     self.cam.StartY = ubY
@@ -126,14 +126,16 @@ class AutoFocuser:
   # subframe to star, then optimize exposure time (minimum 0.25s) to get
   # photon counts in the range of [10 000, 30 000]
   def setupField(self):
+    minExp = 0.1 ### minimum exposure time
+    minPx = 10000; maxPx = 30000; goalPx = (minPx + maxPx)/2 ### photon counts
     self.cam.SetFullFrame()
     self.expose()
     if self.raw:
-        print "%d counts at %.3fs exposure" % (self.cam.MaxPixel, self.expTime)
+      print "%d counts at %.3fs exposure" % (self.cam.MaxPixel, self.expTime)
     self.subframe(50)
-    while (self.expTime > 0.25 and (self.cam.MaxPixel < 10000
-                                    or self.cam.MaxPixel > 30000)):
-      self.expTime = max(0.25, 20000.0 * self.expTime / self.cam.MaxPixel)
+    while (self.expTime > minExp and (self.cam.MaxPixel < minPx
+                                      or self.cam.MaxPixel > maxPx)):
+      self.expTime = max(minExp, goalPx * self.expTime / self.cam.MaxPixel)
       self.expose()
       if self.raw:
         print "%d counts at %.3fs exposure" % (self.cam.MaxPixel, self.expTime)

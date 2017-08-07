@@ -16,10 +16,9 @@ afoc = af.AutoFocuser(SCOPE_NAME, FOC_NAME, FOC_GUESS, EXP_COUNT, False, False)
 def t1():
   print "\nTEST 1: POTENTIAL REPLACEMENTS"
   print "getUTC: %s\nASCOM:  %s\n" % (af.getUTC(), afoc.scope.UTCDate)
-  #print "getLST: %s\nASCOM:  %s\n" % (af.getLST(OBS_LON), afoc.scope.SiderealTime)
   print "OBS_LAT: %f\nASCOM:   %f\n" % (OBS_LAT, afoc.scope.SiteLatitude)
   print "OBS_LON: %f\nASCOM:   %f\n" % (OBS_LON, afoc.scope.SiteLongitude)
-  print "Temp: %f" % afoc.focuser.Temperature
+  print "Temp: %f" % afoc.cam.AmbientTemperature
 
 # skygrid coordinate order
 def t2():
@@ -60,9 +59,7 @@ def t5():
 # AAtoRD confirmation
 def t6():
   print "\nTEST 6: AATORD CONFIRMATION"
-  print "AAtoRD: %s\nASCOM: %s" % (af.AAtoRD(afoc.scope.Altitude,
-                                             afoc.scope.Azimuth,
-                                             afoc.scope.SiteLatitude,
-                                             afoc.scope.SiteLongitude),
+  print "AAtoRD: %s\nASCOM: %s" % (afoc.AAtoRD(afoc.scope.Altitude,
+                                               afoc.scope.Azimuth),
                                    af.Coordinate(afoc.scope.RightAscension*15,
                                                  afoc.scope.Declination))
