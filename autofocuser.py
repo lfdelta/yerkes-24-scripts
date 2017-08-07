@@ -22,9 +22,6 @@ def quit(msg):
   print msg
   sys.exit()
 
-def getUTC():
-  return time.strftime("UTC %Y-%m-%d %H:%M:%S", time.gmtime())
-
 class Coordinate:
   def __init__(self, ra, dec):
     self.RA = ra
@@ -83,6 +80,21 @@ class AutoFocuser:
     self.devs = []
     self.zeroes  = []
 
+  # convert altitude and azimuth coordinates to right ascension and declination,
+  # given the latitude and longitude (all inputs and outputs in units of degrees)
+  # methodology extracted from the follow site:
+  # http://star-www.st-and.ac.uk/~fv/webnotes/chapter7.htm
+  def AAtoRD(self, alt, az):
+    alt = np.deg2rad(alt); az = np.deg2rad(az)
+    lat = np.deg2rad(self.scope.SiteLatitude)
+    lst = self.scope.SiderealTime * 15
+    dec = np.arcsin(np.sin(alt)*np.sin(lat) + np.cos(alt)*np.cos(az)*np.cos(lat))
+    ra = lst - np.rad2deg(np.arcsin(-np.cos(alt)*np.sin(az)/np.cos(dec)))
+    return Coordinate(ra, np.rad2deg(dec))
+
+  def getUTC(self):
+    return time.strftime("UTC %Y-%m-%d %H:%M:%S", self.scope.UTCDate)
+
   def slewTo(self, coord):
     self.scope.SlewToCoordinates(coord.RA, coord.Dec)
 
@@ -125,8 +137,9 @@ class AutoFocuser:
   # [optimal - reach, optimal + reach] with a point every 'prec' steps,
   # then store and analyze the data before running optimizeFocus
   def sampleRange(self, reach, prec):
-    focRange = range(self.optimalFocus - reach,
-                          self.optimalFocus + reach + 1, prec)
+    lowerbound = max(0, self.focuser.MaxStep - reach) # enforce hardware limits
+    upperbound = min(self.optimalFocus + reach, self.focuser.MaxStep)
+    focRange = range(lowerbound, upperbound + 1, prec)
     focRange = [f for f in focRange if not f in self.foci]
     self.foci.extend(focRange) # append non-duplicate focus values
 
@@ -170,11 +183,10 @@ class AutoFocuser:
 
   # print recorded data
   def report(self):
-    utc = getUTC()
+    utc = self.getUTC()
     print utc
     print "%f degC" % self.cam.AmbientTemperature
-    print ("Focus,Mean FWHM(px), FWHM StdDev (px),",
-           "Exposure (s),# Exposures,# Bad Exposures")
+    print "Focus,Mean FWHM(px), FWHM StdDev (px),Exposure (s),# Exposures,# Bad Exposures"
     for i in range(len(self.foci)):
       print "%d,%.3f,%.3f,%f,%d,%d" % (self.foci[i], self.means[i],
                                        self.devs[i], self.expTime,
@@ -261,6 +273,10 @@ class Catalog:
         nearestSqdist = sqdist
         nearestStar = star
     return nearestStar
+
+
+##########
+
 
 # calculate the local sidereal time, in hours
 def getLST(lon):

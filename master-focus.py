@@ -37,7 +37,7 @@ for az in range(0, 360, 60):
 
 print "Altitude (deg),Azimuth (deg),Optimal Focuser Step"
 for altAz in skyGrid:
-  goto = af.AAtoRD(altAz[0], altAz[1], OBS_LAT, OBS_LON)
+  goto = afoc.AAtoRD(altAz[0], altAz[1])
   autofoc.focusAtPoint(starlist.findNearestStar(goto))
   print "%f,%f,%d" % (autofoc.scope.Altitude, autofoc.scope.Azimuth,
                       autofoc.optimalFocus)
